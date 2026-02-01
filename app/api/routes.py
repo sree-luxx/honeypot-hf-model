@@ -43,15 +43,35 @@ async def handle_interact_post(request: Request):
     try:
         data = await request.json()
     except Exception:
-        body_bytes = await request.body()
-        text = body_bytes.decode("utf-8", errors="ignore")
-        data = {"message": text} if text else {}
+        data = {}
+        try:
+            form = await request.form()
+            candidate = None
+            for k in ["message", "input", "text", "content", "prompt"]:
+                if k in form and form[k]:
+                    candidate = form[k]
+                    break
+            if candidate is not None:
+                data = {"message": candidate}
+            else:
+                body_bytes = await request.body()
+                text = body_bytes.decode("utf-8", errors="ignore")
+                data = {"message": text} if text else {}
+        except Exception:
+            body_bytes = await request.body()
+            text = body_bytes.decode("utf-8", errors="ignore")
+            data = {"message": text} if text else {}
 
     try:
         if not isinstance(data, dict):
              data = {"message": str(data)}
         if not data:
              data = {"message": "Ping"}
+        qp = dict(request.query_params)
+        for k in ["message", "input", "text", "content", "prompt"]:
+            if k in qp and qp[k] and not data.get("message"):
+                data["message"] = qp[k]
+                break
         model = HoneypotRequest(**data)
     except Exception:
         model = HoneypotRequest(message="Ping")
