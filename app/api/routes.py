@@ -26,7 +26,7 @@ async def interact(body: HoneypotRequest = None):
     reply = ""
     try:
         # Always generate a reply to keep the conversation going, even if not explicitly a scam
-        reply = agent.generate_reply(memory.context(), message)
+        reply = await agent.generate_reply(memory.context(), message)
         memory.add("agent", reply)
     except Exception as e:
         # Fail gracefully if local LLM errors out
