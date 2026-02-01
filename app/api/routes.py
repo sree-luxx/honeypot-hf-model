@@ -77,3 +77,9 @@ async def handle_interact_post(request: Request):
         model = HoneypotRequest(message="Ping")
 
     return await interact(model)
+
+@router.get("/honeypot/interact", response_model=HoneypotResponse, dependencies=[Depends(get_api_key)])
+async def handle_interact_get():
+    # Provide a default lightweight response for GET requests
+    model = HoneypotRequest(message="Ping")
+    return await interact(model)
