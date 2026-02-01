@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from app.core.scam_detector import detect_scam
 from app.core.agent import HoneypotAgent
 from app.core.extractor import IntelExtractor
@@ -12,12 +12,9 @@ agent = HoneypotAgent()
 extractor = IntelExtractor()
 memory = ConversationMemory()
 
-@router.post("/honeypot/interact", response_model=HoneypotResponse, dependencies=[Depends(get_api_key)])
-async def interact(body: HoneypotRequest = None):
-    if body is None:
-        body = HoneypotRequest()
-        
-    message = body.message
+async def interact(body: HoneypotRequest):
+    # Core logic extracted to be reusable
+    message = body.message or "Ping"
 
     memory.add("scammer", message)
 
@@ -40,3 +37,23 @@ async def interact(body: HoneypotRequest = None):
         agent_reply=reply,
         extracted_intel=intel
     )
+
+@router.post("/honeypot/interact", response_model=HoneypotResponse, dependencies=[Depends(get_api_key)])
+async def handle_interact_post(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        body_bytes = await request.body()
+        text = body_bytes.decode("utf-8", errors="ignore")
+        data = {"message": text} if text else {}
+
+    try:
+        if not isinstance(data, dict):
+             data = {"message": str(data)}
+        if not data:
+             data = {"message": "Ping"}
+        model = HoneypotRequest(**data)
+    except Exception:
+        model = HoneypotRequest(message="Ping")
+
+    return await interact(model)
