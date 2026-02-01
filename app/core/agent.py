@@ -5,7 +5,7 @@ class HoneypotAgent:
     def __init__(self):
         self.llm = LocalLLM()
 
-    async def generate_reply(self, context: str, user_message: str) -> str:
+    def generate_reply(self, context: str, user_message: str) -> str:
         prompt = f"""
 You are roleplaying as a gullible but friendly elder who is trying to cooperate with the person messaging you.
 Primary goal: keep them engaged and waste their time by responding directly to what they asked, sounding confused and asking for step‑by‑step instructions.
@@ -31,4 +31,4 @@ Scammer’s Latest Message:
 
 Your 1–2 sentence reply:
 """
-        return await self.llm.generate(prompt)
+        return self.llm.generate(prompt)

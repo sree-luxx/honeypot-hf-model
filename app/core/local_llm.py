@@ -1,33 +1,32 @@
-from huggingface_hub import AsyncInferenceClient
+from huggingface_hub import InferenceClient
 from app.config import HF_TOKEN, HF_MODEL_ID
-import asyncio
 
 class LocalLLM:
     def __init__(self):
         if not HF_TOKEN:
             print("Warning: HF_TOKEN not found in environment variables.")
         
-        self.client = AsyncInferenceClient(token=HF_TOKEN)
+        # Set a timeout (e.g., 20 seconds) to ensure we respond before the client (30s) times out
+        self.client = InferenceClient(token=HF_TOKEN, timeout=20)
         self.model = HF_MODEL_ID
 
-    async def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> str:
         try:
-            messages = [{"role": "user", "content": prompt}]
-            # Add a timeout to prevent hanging the request indefinitely
-            # 25 seconds timeout to allow some buffer before 30s connection timeout
-            response = await asyncio.wait_for(
-                self.client.chat_completion(
-                    messages=messages,
-                    model=self.model,
-                    max_tokens=100,
-                    temperature=0.8
-                ),
-                timeout=25.0
+            # Using text-generation or chat-completion depending on the model
+            # For Llama 3 instruct, chat completion is better if supported, 
+            # but let's stick to text_generation for broad compatibility or structure the prompt manually.
+            # Llama 3 uses specific tokens, but the InferenceClient might handle some.
+            # Let's use simple text_generation with a good prompt structure.
+            
+            response = self.client.text_generation(
+                prompt,
+                model=self.model,
+                max_new_tokens=100,
+                temperature=0.8,
+                return_full_text=False
             )
-            return response.choices[0].message.content.strip()
-        except asyncio.TimeoutError:
-            print("Error: Hugging Face API timed out (25s limit).")
-            return "Oh dear, I'm a bit confused right now. Can you explain that again slowly?"
+            return response.strip()
         except Exception as e:
             print(f"Error generating response from Hugging Face: {e}")
-            return "..."  # Fallback
+            # Fallback response to avoid empty replies on error/timeout
+            return "I am confused, can you explain that again?"

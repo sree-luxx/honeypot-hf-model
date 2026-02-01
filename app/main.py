@@ -1,11 +1,18 @@
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-
 from app.api.routes import router, interact
 from app.schemas.response import HoneypotRequest
-from app.core.security import get_api_key
 
 app = FastAPI(title="Honeypot API")
+
+# Dummy dependency if not defined elsewhere
+async def get_api_key():
+    return "valid-key"
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # -------------------- CORS --------------------
 app.add_middleware(
