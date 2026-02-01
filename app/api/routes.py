@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.core.scam_detector import detect_scam
 from app.core.agent import HoneypotAgent
 from app.core.extractor import IntelExtractor
 from app.core.memory import ConversationMemory
 from app.schemas.response import HoneypotRequest, HoneypotResponse
+from app.core.security import get_api_key
 
 router = APIRouter()
 
@@ -11,7 +12,7 @@ agent = HoneypotAgent()
 extractor = IntelExtractor()
 memory = ConversationMemory()
 
-@router.post("/honeypot/interact", response_model=HoneypotResponse)
+@router.post("/honeypot/interact", response_model=HoneypotResponse, dependencies=[Depends(get_api_key)])
 async def interact(body: HoneypotRequest):
     message = body.message
 

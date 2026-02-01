@@ -5,4 +5,5 @@ load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_MODEL_ID = os.getenv("HF_MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct")
+API_KEY = os.getenv("API_KEY")
 CONFIDENCE_THRESHOLD = 0.5
