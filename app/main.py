@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -6,12 +6,19 @@ from app.api.routes import router
 from app.schemas.response import HoneypotRequest
 from app.core.agent import HoneypotAgent
 from app.core.memory import ConversationMemory
+from app.models.spam_classifier import ScamClassifier
+from app.core.extractor import IntelExtractor
+from app.config import CONFIDENCE_THRESHOLD
+import os
 
 app = FastAPI(title="Honeypot API")
 
-# -------------------- API KEY DEPENDENCY --------------------
-async def get_api_key():
-    return "valid-key"
+# -------------------- GUVI API KEY --------------------
+GUVI_API_KEY = os.getenv("GUVI_API_KEY")
+
+def verify_guvi_api_key(x_api_key: str = Header(...)):
+    if not GUVI_API_KEY or x_api_key != GUVI_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
 
 # -------------------- STATIC FILES --------------------
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -35,28 +42,38 @@ def health_check():
         "message": "Honeypot API running"
     }
 
-# -------------------- CORE LOGIC (NO EXTRA FILES) --------------------
+# -------------------- CORE COMPONENTS --------------------
 agent = HoneypotAgent()
 memory = ConversationMemory()
+classifier = ScamClassifier()
+extractor = IntelExtractor()
 
-@app.post("/interact")
+# -------------------- REQUIRED ENDPOINT --------------------
+@app.post("/honeypot/interact")
 async def honeypot_entry(
     payload: HoneypotRequest,
-    _: str = Depends(get_api_key)
+    _: None = Depends(verify_guvi_api_key)
 ):
-    # Store incoming message
-    memory.add("scammer", payload.message)
+    user_message = payload.message
 
-    # Build conversation context
+    # 1️⃣ Scam detection
+    scam_result = classifier.predict(user_message)
+
+    # 2️⃣ Maintain conversation memory
+    memory.add("scammer", user_message)
     context = memory.context()
 
-    # Generate reply from LLM
-    reply = agent.generate_reply(context, payload.message)
-
-    # Store agent reply
+    # 3️⃣ Generate honeypot reply
+    reply = agent.generate_reply(context, user_message)
     memory.add("agent", reply)
 
-    # ✅ MUST RETURN JSON-SERIALIZABLE DATA
+    # 4️⃣ Extract intelligence
+    extracted_intel = extractor.extract(user_message)
+
+    # 5️⃣ Structured response (GUVI-compatible)
     return {
-        "reply": reply
+        "is_scam": scam_result["is_scam"],
+        "confidence": scam_result["confidence"],
+        "reply": reply,
+        "extracted_intel": extracted_intel
     }
