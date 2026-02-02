@@ -10,7 +10,7 @@ from app.core.extractor import IntelExtractor
 
 # -------------------- ENV --------------------
 load_dotenv()
-API_KEY = os.getenv("API_KEY")  # may be None at boot time
+API_KEY = os.getenv("API_KEY")
 
 # -------------------- APP --------------------
 app = FastAPI()
@@ -32,56 +32,62 @@ extractor = IntelExtractor()
 # -------------------- HEALTH --------------------
 @app.get("/")
 async def health():
-    return {
-        "success": True,
-        "message": "Honeypot API running"
-    }
+    return {"status": "ok", "service": "honeypot"}
 
 # -------------------- MAIN ENDPOINT --------------------
-@app.post("/honeypot/interact")
+@app.api_route("/honeypot/interact", methods=["GET", "POST", "OPTIONS"])
 async def honeypot_interact(
     request: Request,
     x_api_key: str = Header(None)
 ):
-    # 🔐 API KEY VALIDATION (SAFE)
+    # -------- AUTH --------
     if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfigured: API_KEY missing"
-        )
+        return {"success": False, "error": "Server misconfigured"}
 
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- BODY PARSING --------
-    try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            body = {}
-    except:
-        body = {}
+    # -------- MESSAGE EXTRACTION (SAFE) --------
+    message = None
 
-    message = (
-        body.get("message")
-        or body.get("text")
-        or body.get("input")
-        or body.get("query")
-        or body.get("content")
-        or "Hello"
-    )
+    # 1️⃣ Query params (MOST RELIABLE)
+    qp = dict(request.query_params)
+    for key in ["message", "text", "input", "query", "content", "prompt"]:
+        if key in qp and qp[key]:
+            message = qp[key]
+            break
+
+    # 2️⃣ Raw body (NO JSON parsing)
+    if not message:
+        try:
+            raw = await request.body()
+            if raw:
+                message = raw.decode("utf-8", errors="ignore").strip()
+        except:
+            pass
+
+    # 3️⃣ Absolute fallback
+    if not message:
+        message = "Hello"
 
     # -------- SCAM DETECTION --------
     detection = classifier.predict(message)
 
-    # -------- AGENT RESPONSE --------
+    # -------- AGENT LOGIC --------
     memory.add("scammer", message)
     context = memory.context()
-    reply = agent.generate_reply(context, message)
+
+    try:
+        reply = agent.generate_reply(context, message)
+    except:
+        reply = "Could you please explain that again?"
+
     memory.add("agent", reply)
 
     # -------- INTEL EXTRACTION --------
     intel = extractor.extract(message)
 
+    # -------- FINAL RESPONSE --------
     return {
         "success": True,
         "result": {
