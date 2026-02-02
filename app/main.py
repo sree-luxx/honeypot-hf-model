@@ -10,10 +10,7 @@ from app.core.extractor import IntelExtractor
 
 # -------------------- ENV --------------------
 load_dotenv()
-API_KEY = os.getenv("API_KEY")
-
-if not API_KEY:
-    raise RuntimeError("API_KEY not set")
+API_KEY = os.getenv("API_KEY")  # may be None at boot time
 
 # -------------------- APP --------------------
 app = FastAPI()
@@ -46,11 +43,17 @@ async def honeypot_interact(
     request: Request,
     x_api_key: str = Header(None)
 ):
-    # -------- API KEY VALIDATION --------
+    # 🔐 API KEY VALIDATION (SAFE)
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Server misconfigured: API_KEY missing"
+        )
+
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- SAFE BODY PARSING --------
+    # -------- BODY PARSING --------
     try:
         body = await request.json()
         if not isinstance(body, dict):
@@ -58,7 +61,6 @@ async def honeypot_interact(
     except:
         body = {}
 
-    # -------- MESSAGE EXTRACTION --------
     message = (
         body.get("message")
         or body.get("text")
@@ -74,14 +76,12 @@ async def honeypot_interact(
     # -------- AGENT RESPONSE --------
     memory.add("scammer", message)
     context = memory.context()
-
     reply = agent.generate_reply(context, message)
     memory.add("agent", reply)
 
     # -------- INTEL EXTRACTION --------
     intel = extractor.extract(message)
 
-    # -------- RESPONSE --------
     return {
         "success": True,
         "result": {
