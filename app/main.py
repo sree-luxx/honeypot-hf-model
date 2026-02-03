@@ -35,35 +35,37 @@ extractor = IntelExtractor()
 async def health():
     return {"status": "ok", "service": "honeypot"}
 
-# -------------------- MAIN ENDPOINT --------------------
 @app.post("/honeypot/interact")
 async def honeypot_interact(
-    payload: Dict[str, Any] = Body(...),
+    payload: Any = Body(...),
     x_api_key: str = Header(None)
 ):
     # -------- AUTH --------
-    if not API_KEY:
-        # Fallback for development or if API_KEY not set
-        pass 
-        # raise HTTPException(status_code=500, detail="Server misconfigured")
-
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- SAFE MESSAGE EXTRACTION --------
-    message = (
-        payload.get("message")
-        or payload.get("text")
-        or payload.get("input")
-        or payload.get("query")
-        or payload.get("prompt")
-    )
+    # -------- MESSAGE EXTRACTION (ULTRA SAFE) --------
+    message = None
 
-    if isinstance(message, dict):
-        message = str(message)
+    if isinstance(payload, str):
+        message = payload
+
+    elif isinstance(payload, dict):
+        message = (
+            payload.get("message")
+            or payload.get("text")
+            or payload.get("input")
+            or payload.get("query")
+            or payload.get("prompt")
+            or payload.get("content")
+        )
+
+        # handle nested payloads
+        if not message and "data" in payload and isinstance(payload["data"], dict):
+            message = payload["data"].get("message")
 
     if not isinstance(message, str):
-        raise HTTPException(status_code=400, detail="Invalid message format")
+        raise HTTPException(status_code=400, detail="Invalid request body")
 
     message = message.strip()
     if not message:
@@ -79,15 +81,14 @@ async def honeypot_interact(
     try:
         reply = agent.generate_reply(context, message)
     except Exception as e:
-        print(f"Error generating reply: {e}")
-        reply = "Could you please explain that again?"
+        print("Agent error:", e)
+        reply = "Sorry, can you explain that again?"
 
     memory.add("agent", reply)
 
     # -------- INTEL EXTRACTION --------
     intel = extractor.extract(message)
 
-    # -------- FINAL RESPONSE --------
     return {
         "success": True,
         "result": {
