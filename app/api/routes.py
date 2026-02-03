@@ -24,8 +24,9 @@ async def interact(body: HoneypotRequest):
         try:
             reply = agent.generate_reply(memory.context(), message)
         except Exception as e:
-            # Fail gracefully if local LLM errors out
-            raise HTTPException(status_code=500, detail=f"Reply generation failed: {str(e)}")
+            # Log the error but don't fail the request. Return a fallback reply.
+            print(f"Error generating reply: {e}")
+            reply = "I am confused, can you explain that again?"
         memory.add("agent", reply)
 
     intel = extractor.extract(message)

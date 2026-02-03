@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from app.core.agent import HoneypotAgent
 from app.core.memory import ConversationMemory
-from app.models.spam_classifier import ScamClassifier
+from app.core.scam_detector import detect_scam
 from app.core.extractor import IntelExtractor
 
 # -------------------- ENV --------------------
@@ -28,7 +28,6 @@ app.add_middleware(
 # -------------------- CORE --------------------
 agent = HoneypotAgent()
 memory = ConversationMemory()
-classifier = ScamClassifier()
 extractor = IntelExtractor()
 
 # -------------------- HEALTH --------------------
@@ -44,9 +43,11 @@ async def honeypot_interact(
 ):
     # -------- AUTH --------
     if not API_KEY:
-        raise HTTPException(status_code=500, detail="Server misconfigured")
+        # Fallback for development or if API_KEY not set
+        pass 
+        # raise HTTPException(status_code=500, detail="Server misconfigured")
 
-    if x_api_key != API_KEY:
+    if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     # -------- SAFE MESSAGE EXTRACTION --------
@@ -69,7 +70,7 @@ async def honeypot_interact(
         raise HTTPException(status_code=400, detail="Empty message")
 
     # -------- SCAM DETECTION --------
-    detection = classifier.predict(message)
+    detection = detect_scam(message)
 
     # -------- AGENT LOGIC --------
     memory.add("scammer", message)
@@ -77,7 +78,8 @@ async def honeypot_interact(
 
     try:
         reply = agent.generate_reply(context, message)
-    except Exception:
+    except Exception as e:
+        print(f"Error generating reply: {e}")
         reply = "Could you please explain that again?"
 
     memory.add("agent", reply)
