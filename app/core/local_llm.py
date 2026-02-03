@@ -12,21 +12,32 @@ class LocalLLM:
 
     def generate(self, prompt: str) -> str:
         try:
-            # Using text-generation or chat-completion depending on the model
-            # For Llama 3 instruct, chat completion is better if supported, 
-            # but let's stick to text_generation for broad compatibility or structure the prompt manually.
-            # Llama 3 uses specific tokens, but the InferenceClient might handle some.
-            # Let's use simple text_generation with a good prompt structure.
-            
-            response = self.client.text_generation(
-                prompt,
-                model=self.model,
-                max_new_tokens=100,
-                temperature=0.8,
-                return_full_text=False
+            system_prompt = (
+                "You are an AI scam-detection honeypot agent. "
+                "Your goal is to engage the user in conversation naturally, "
+                "ask follow-up questions when needed, and continue the dialogue. "
+                "Do not end the conversation early. "
+                "If the message is unclear, ask a clarifying question. "
+                "If scam indicators appear, encourage the user to reveal details "
+                "such as UPI IDs, links, or bank information."
             )
-            return response.strip()
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+
+            response = self.client.chat_completion(
+                messages,
+                model=self.model,
+                max_tokens=150,
+                temperature=0.7,
+            )
+
+            return response.choices[0].message.content.strip()
+
         except Exception as e:
-            print(f"Error generating response from Hugging Face: {e}")
-            # Fallback response to avoid empty replies on error/timeout
-            return "I am confused, can you explain that again?"
+            import traceback
+            traceback.print_exc()
+            print(f"HF generation error: {e}")
+            return "Could you tell me a bit more about that?"
