@@ -37,10 +37,14 @@ async def health():
 
 @app.post("/honeypot/interact")
 async def honeypot_interact(
-    payload: Any = Body(...),
+    payload: Dict[str, Any] = Body(...),
     x_api_key: str = Header(None)
 ):
     # -------- AUTH --------
+    if not API_KEY:
+        # Fallback for development or if API_KEY not set
+        pass 
+        # raise HTTPException(status_code=500, detail="Server misconfigured")
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
