@@ -29,7 +29,7 @@ class HoneypotRequest(BaseModel):
                     return data
             
             # Check for aliases
-            aliases = ['text', 'content', 'body', 'input', 'prompt', 'query']
+            aliases = ['SCAMMER','text', 'content', 'body', 'input', 'prompt', 'query']
             for alias in aliases:
                 if alias in data:
                     data['message'] = data[alias]
