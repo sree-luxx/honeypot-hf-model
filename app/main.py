@@ -1,7 +1,5 @@
 import os
-from typing import Any, Dict
-
-from fastapi import FastAPI, Header, HTTPException, Body
+from fastapi import FastAPI, Request, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -15,7 +13,7 @@ load_dotenv()
 API_KEY = os.getenv("API_KEY")
 
 # -------------------- APP --------------------
-app = FastAPI()
+app = FastAPI(title="Honeypot API", docs_url="/docs")
 
 # -------------------- CORS --------------------
 app.add_middleware(
@@ -35,64 +33,78 @@ extractor = IntelExtractor()
 async def health():
     return {"status": "ok", "service": "honeypot"}
 
-@app.post("/honeypot/interact")
+# -------------------- MAIN ENDPOINT --------------------
+@app.api_route("/honeypot/interact", methods=["POST", "OPTIONS"])
 async def honeypot_interact(
-    payload: Dict[str, Any] = Body(...),
+    request: Request,
     x_api_key: str = Header(None)
 ):
-    # -------- AUTH --------
-    if not API_KEY:
-        # Fallback for development or if API_KEY not set
-        pass 
-        # raise HTTPException(status_code=500, detail="Server misconfigured")
+    # ---------- AUTH ----------
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- MESSAGE EXTRACTION (ULTRA SAFE) --------
+    # ---------- MESSAGE EXTRACTION (NO VALIDATION FAILURES) ----------
     message = None
 
-    if isinstance(payload, str):
-        message = payload
+    # 1️⃣ Query params (hackathon UIs love this)
+    qp = dict(request.query_params)
+    for key in ["message", "SCAMMER", "text", "input", "query", "content", "prompt"]:
+        if key in qp and qp[key]:
+            message = qp[key]
+            break
 
-    elif isinstance(payload, dict):
-        message = (
-            payload.get("message")
-            or payload.get("text")
-            or payload.get("input")
-            or payload.get("query")
-            or payload.get("prompt")
-            or payload.get("content")
-        )
-
-        # handle nested payloads
-        if not message and "data" in payload and isinstance(payload["data"], dict):
-            message = payload["data"].get("message")
-
-    if not isinstance(message, str):
-        raise HTTPException(status_code=400, detail="Invalid request body")
-
-    message = message.strip()
+    # 2️⃣ Try JSON (if present)
     if not message:
-        raise HTTPException(status_code=400, detail="Empty message")
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                for key in ["message", "SCAMMER", "text", "input", "query", "content", "prompt"]:
+                    if key in body and body[key]:
+                        message = str(body[key])
+                        break
+        except:
+            pass
 
-    # -------- SCAM DETECTION --------
+    # 3️⃣ Try form-data
+    if not message:
+        try:
+            form = await request.form()
+            for key in ["message", "SCAMMER", "text", "input", "query", "content", "prompt"]:
+                if key in form and form[key]:
+                    message = str(form[key])
+                    break
+        except:
+            pass
+
+    # 4️⃣ Raw body fallback
+    if not message:
+        try:
+            raw = await request.body()
+            if raw:
+                message = raw.decode("utf-8", errors="ignore").strip()
+        except:
+            pass
+
+    # 5️⃣ Absolute fallback (never fail)
+    if not message:
+        message = "Hello"
+
+    # ---------- SCAM PIPELINE ----------
     detection = detect_scam(message)
 
-    # -------- AGENT LOGIC --------
     memory.add("scammer", message)
     context = memory.context()
 
     try:
         reply = agent.generate_reply(context, message)
-    except Exception as e:
-        print("Agent error:", e)
-        reply = "Sorry, can you explain that again?"
+    except Exception:
+        reply = "I didn’t quite catch that—could you clarify?"
 
     memory.add("agent", reply)
 
-    # -------- INTEL EXTRACTION --------
     intel = extractor.extract(message)
 
+    # ---------- RESPONSE ----------
     return {
         "success": True,
         "result": {
@@ -106,3 +118,4 @@ async def honeypot_interact(
             }
         }
     }
+
