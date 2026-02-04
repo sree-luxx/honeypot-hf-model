@@ -36,7 +36,7 @@ class HoneypotRequest(BaseModel):
                     break
                 # Check case-insensitive alias
                 for k, v in data.items():
-                    if k.lower() == alias:
+                    if k.lower() == alias.lower():
                         data['message'] = v
                         break
                 if 'message' in data:
