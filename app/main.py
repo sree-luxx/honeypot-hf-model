@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from fastapi import FastAPI, Header, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,20 +37,14 @@ async def health():
 
 @app.post("/honeypot/interact")
 async def honeypot_interact(
-    payload: Dict[str, Any] = Body(...),
+    payload: Union[str, Dict[str, Any]] = Body(...),
     x_api_key: str = Header(None)
 ):
     # -------- AUTH --------
-    if not API_KEY:
-        # Fallback for development or if API_KEY not set
-        pass 
-        # raise HTTPException(status_code=500, detail="Server misconfigured")
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- MESSAGE EXTRACTION (ULTRA SAFE) --------
-    message = None
-
+    # -------- MESSAGE EXTRACTION (ROBUST) --------
     if isinstance(payload, str):
         message = payload
 
@@ -61,14 +55,14 @@ async def honeypot_interact(
             or payload.get("input")
             or payload.get("query")
             or payload.get("prompt")
-            or payload.get("SCAMMER")
-            or payload.get("scammer")
             or payload.get("content")
         )
 
-        # handle nested payloads
         if not message and "data" in payload and isinstance(payload["data"], dict):
             message = payload["data"].get("message")
+
+    else:
+        message = None
 
     if not isinstance(message, str):
         raise HTTPException(status_code=400, detail="Invalid request body")
