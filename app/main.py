@@ -44,25 +44,32 @@ async def honeypot_interact(
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # -------- MESSAGE EXTRACTION (ROBUST) --------
+    # -------- MESSAGE EXTRACTION (HACKATHON-COMPATIBLE) --------
+    message = None
+
+    # Case 1: raw string
     if isinstance(payload, str):
         message = payload
 
+    # Case 2: structured JSON
     elif isinstance(payload, dict):
-        message = (
-            payload.get("message")
-            or payload.get("text")
-            or payload.get("input")
-            or payload.get("query")
-            or payload.get("prompt")
-            or payload.get("content")
-        )
+        # Hackathon format
+        if isinstance(payload.get("message"), dict):
+            message = payload["message"].get("text")
+
+        # Fallbacks (keep your robustness)
+        if not message:
+            message = (
+                payload.get("message")
+                or payload.get("text")
+                or payload.get("input")
+                or payload.get("query")
+                or payload.get("prompt")
+                or payload.get("content")
+            )
 
         if not message and "data" in payload and isinstance(payload["data"], dict):
             message = payload["data"].get("message")
-
-    else:
-        message = None
 
     if not isinstance(message, str):
         raise HTTPException(status_code=400, detail="Invalid request body")
@@ -86,19 +93,8 @@ async def honeypot_interact(
 
     memory.add("agent", reply)
 
-    # -------- INTEL EXTRACTION --------
-    intel = extractor.extract(message)
-
+    # -------- RESPONSE (STRICT HACKATHON FORMAT) --------
     return {
-        "success": True,
-        "result": {
-            "is_scam": bool(detection.get("is_scam", False)),
-            "confidence": float(detection.get("confidence", 0.0)),
-            "agent_reply": reply,
-            "extracted_intel": {
-                "upi_ids": intel.get("upi_ids", []),
-                "links": intel.get("links", []),
-                "bank_accounts": intel.get("bank_accounts", [])
-            }
-        }
+        "status": "success",
+        "reply": reply
     }
